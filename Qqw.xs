@@ -1114,10 +1114,7 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	ParamSpec *param_spec;
 	SV *declarator;
 	I32 floor_ix;
-	int save_ix;
 	OpGuard *prelude_sentinel;
-	OpGuard *attrs_sentinel;
-	OP *body;
 	I32 c;
 
 	declarator =
@@ -1127,13 +1124,6 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	}
 
 	lex_read_space(0);
-
-	/* we're a subroutine declaration */
-	floor_ix = start_subparse(FALSE, CVf_ANON);
-	SAVEFREESV(PL_compcv);
-
-	/* create outer block: '{' */
-	save_ix = S_block_start(aTHX_ TRUE);
 
 	/* initialize synthetic optree */
 	Newx(prelude_sentinel, 1, OpGuard);
@@ -1276,143 +1266,13 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 		lex_read_space(0);
 	}
 
-	/* attributes */
-	Newx(attrs_sentinel, 1, OpGuard);
-	op_guard_init(attrs_sentinel);
-	sentinel_register(sen, attrs_sentinel, free_op_guard_void);
-
-	if (param_spec) {
-		/* my (...) = @_; */
-		OP *lhs;
-		size_t i, lim;
-
-		lhs = NULL;
-
-		for (i = 0, lim = param_spec->positional_required.used; i < lim; i++) {
-			OP *const var = my_var(
-				aTHX_
-				OPf_WANT_LIST | (OPpLVAL_INTRO << 8),
-				param_spec->positional_required.data[i].padoff
-			);
-			lhs = op_append_elem(OP_LIST, lhs, var);
-		}
-
-		for (i = 0, lim = param_spec->positional_optional.used; i < lim; i++) {
-			OP *const var = my_var(
-				aTHX_
-				OPf_WANT_LIST | (OPpLVAL_INTRO << 8),
-				param_spec->positional_optional.data[i].param.padoff
-			);
-			lhs = op_append_elem(OP_LIST, lhs, var);
-		}
-
-		{
-			PADOFFSET padoff;
-			I32 type;
-			bool slurpy_hash;
-
-			/*
-			 * cases:
-			 *  1) no named params
-			 *   1.1) slurpy
-			 *       => put it in
-			 *   1.2) no slurpy
-			 *       => nop
-			 *  2) named params
-			 *   2.1) no slurpy
-			 *       => synthetic %{rest}
-			 *   2.2) slurpy is a hash
-			 *       => put it in
-			 *   2.3) slurpy is an array
-			 *       => synthetic %{rest}
-			 *          remember to declare array later
-			 */
-
-			slurpy_hash = param_spec->slurpy.name && SvPV_nolen(param_spec->slurpy.name)[0] == '%';
-			if (!count_named_params(param_spec)) {
-				if (param_spec->slurpy.name) {
-					padoff = param_spec->slurpy.padoff;
-					type = slurpy_hash ? OP_PADHV : OP_PADAV;
-				} else {
-					padoff = NOT_IN_PAD;
-					type = OP_PADSV;
-				}
-			} else if (slurpy_hash) {
-				padoff = param_spec->slurpy.padoff;
-				type = OP_PADHV;
-			} else {
-				padoff = param_spec->rest_hash = pad_add_name_pvs("%{rest}", 0, NULL, NULL);
-				type = OP_PADHV;
-			}
-
-			if (padoff != NOT_IN_PAD) {
-				OP *const var = my_var_g(
-					aTHX_
-					type,
-					OPf_WANT_LIST | (OPpLVAL_INTRO << 8),
-					padoff
-				);
-
-				lhs = op_append_elem(OP_LIST, lhs, var);
-
-				if (type == OP_PADHV) {
-					param_spec->rest_hash = padoff;
-				}
-			}
-		}
-
-		if (lhs) {
-			OP *rhs;
-			lhs->op_flags |= OPf_PARENS;
-			rhs = newAVREF(newGVOP(OP_GV, 0, PL_defgv));
-
-			op_guard_update(prelude_sentinel, op_append_list(
-				OP_LINESEQ, prelude_sentinel->op,
-				newSTATEOP(
-					0, NULL,
-					newASSIGNOP(OPf_STACKED, lhs, 0, rhs)
-				)
-			));
-		}
-	}
-
-	/* finally let perl parse the actual subroutine body */
-	body = parse_block(0);
-
-	body = op_append_list(OP_LINESEQ, op_guard_relinquish(prelude_sentinel), body);
-
 	/* it's go time. */
-	{
-		int runtime = spec->flags & FLAG_RUNTIME;
-		CV *cv;
-		OP *const attrs = op_guard_relinquish(attrs_sentinel);
+	*pop = newSVOP( OP_CONST, 0, newSVpvn_flags( "a", 1, 0 ) );
+	*pop = op_append_elem( OP_LIST, *pop,
+			       newSVOP( OP_CONST, 0,
+					newSVpvn_flags( "b", 1, 0 ) ) );
 
-		SvREFCNT_inc_simple_void(PL_compcv);
-
-		/* close outer block: '}' */
-		S_block_end(aTHX_ save_ix, body);
-
-		cv = newATTRSUB(
-			floor_ix,
-			NULL,
-			NULL,
-			attrs,
-			body
-		);
-
-		if (cv) {
-			register_info(aTHX_ PTR2UV(CvROOT(cv)), declarator, spec, param_spec);
-		}
-
-		*pop = newUNOP(
-			OP_REFGEN, 0,
-			newSVOP(
-				OP_ANONCODE, 0,
-				(SV *)cv
-			)
-		);
-		return KEYWORD_PLUGIN_EXPR;
-	}
+	return KEYWORD_PLUGIN_EXPR;
 }
 /* }}} */
 
