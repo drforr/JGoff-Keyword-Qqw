@@ -1,0 +1,16 @@
+\.tar\.gz$
+^Build$
+^JGoff-Keyword-Qqw-
+^GNUmakefile$
+^MANIFEST\.(?!SKIP$)
+^MYMETA\.
+^Makefile$
+^Makefile\.old$
+^Qqw\.(?:[iocs]|bs)$
+^\.
+^_build
+^blib
+^cover_db$
+^pm_to_blib
+^remote$
+^untracked

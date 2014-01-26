@@ -1,0 +1,13 @@
+Changes
+MANIFEST
+MANIFEST.SKIP
+Makefile.PL
+Qqw.xs
+README
+lib/JGoff/Keyword/Qqw.pm
+lib/JGoff/Keyword/Qqw/Info.pm
+padop_on_crack.c.inc
+t/00-load.t
+t/01-compiles.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
