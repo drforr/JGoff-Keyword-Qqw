@@ -1,7 +1,11 @@
 JGoff-Keyword-Qqw
 
-Interpolating 'qqw' operator
+Interpolating version of the 'qw()' operator.
 
+CREDITS
+
+Kudos to mauke (Lukas Mai) for Function::Parameters, which this is based
+entirely on. All implementation bugs, however, are mine.
 
 INSTALLATION
 
@@ -33,10 +37,9 @@ You can also look for information at:
     MetaCPAN
         https://metacpan.org/module/JGoff::Keyword::Qqw
 
-
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2009-2013 Lukas Mai
+Copyright (C) 2014 Jeffrey Goff
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
