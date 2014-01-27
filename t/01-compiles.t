@@ -28,14 +28,5 @@ is_deeply [@add], [qw(a b)];
 my @mymap = qqw ($fun, @args);
 is_deeply [@mymap], [qw(a b)];
 
-my @fac_1 = qqw ($n);
-is_deeply [@fac_1], [qw(a b)];
-
-#ok $id_1->(1), 'basic sanity';
-#ok $id_2->(1), 'simple prototype';
-##ok $id_3->(1), 'definition over multiple lines';
-#is $add->(2, 2), 4, '2 + 2 = 4';
-#is $add->(39, 3), 42, '39 + 3 = 42';
-#is_deeply [$mymap->( sub { $_ * 2 }, 2, 3, 5, 9)], [4, 6, 10, 18], 'mymap works';
-##is $fac_1->(5), 120, 'fac_1';
-##is qqw ($x, $y) { $x . $y }->(qqw ($foo) { $foo + 1 }->(3), qqw ($bar) { $bar * 2 }->(1)), '42', 'anonyqqw';
+my @balanced_1 = qqw<$fun>;
+is_deeply [@balanced_1], [qw(a b)];

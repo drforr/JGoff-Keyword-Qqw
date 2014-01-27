@@ -753,11 +753,13 @@ enum {
 	PARAM_NAMED    = 0x02
 };
 
+/* {{{ parse_param */
 static PADOFFSET parse_param(
 	pTHX_
 	Sentinel sen,
 	const SV *declarator, const KWSpec *spec, ParamSpec *param_spec,
-	int *pflags, SV **pname, OpGuard *ginit, SV **ptype
+	int *pflags, SV **pname, OpGuard *ginit, SV **ptype,
+	I32 start_delim, I32 end_delim
 ) {
 	I32 c;
 	char sigil;
@@ -769,111 +771,34 @@ static PADOFFSET parse_param(
 
 	c = lex_peek_unichar(0);
 
-	if (spec->flags & FLAG_TYPES_OK) {
-		if (c == '(') {
-			I32 floor;
-			OP *expr;
-			Resource *expr_sentinel;
+	switch(c) {
+		case -1:
+			croak("In %"SVf": unterminated parameter list", SVfARG(declarator));
+		case '$':
+		case '@':
+		case '%':
+			sigil = c;
 
-			lex_read_unichar(0);
-
-			floor = start_subparse(FALSE, 0);
-			SAVEFREESV(PL_compcv);
-			CvSPECIAL_on(PL_compcv);
-
-			if (!(expr = parse_fullexpr(PARSE_OPTIONAL))) {
-				croak("In %"SVf": invalid type expression", SVfARG(declarator));
-			}
-			if (MY_OP_SLABBED(expr)) {
-				expr_sentinel = NULL;
-			} else {
-				expr_sentinel = sentinel_register(sen, expr, free_op_void);
-			}
-
-			lex_read_space(0);
-			c = lex_peek_unichar(0);
-			if (c != ')') {
-				croak("In %"SVf": missing ')' after type expression", SVfARG(declarator));
-			}
 			lex_read_unichar(0);
 			lex_read_space(0);
 
-			SvREFCNT_inc_simple_void(PL_compcv);
-			if (expr_sentinel) {
-				sentinel_disarm(expr_sentinel);
+			if (!(name = my_scan_word(aTHX_ sen, FALSE))) {
+				croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
 			}
-			*ptype = my_eval(aTHX_ sen, floor, expr);
-			if (!SvROK(*ptype)) {
-				*ptype = reify_type(aTHX_ sen, declarator, spec, *ptype);
-			}
-			if (!sv_isobject(*ptype)) {
-				croak("In %"SVf": (%"SVf") doesn't look like a type object", SVfARG(declarator), SVfARG(*ptype));
-			}
-
-			c = lex_peek_unichar(0);
-		} else if (MY_UNI_IDFIRST(c)) {
-			*ptype = parse_type(aTHX_ sen, declarator);
-			*ptype = reify_type(aTHX_ sen, declarator, spec, *ptype);
-
-			c = lex_peek_unichar(0);
-		}
+			sv_insert(name, 0, 0, &sigil, 1);
+			*pname = name;
+			break;
+		default:
+			croak("In %"SVf": unexpected '%c' in parameter list (expecting a sigil)", SVfARG(declarator), (int)c);
 	}
-
-	if (c == ':') {
-		lex_read_unichar(0);
-		lex_read_space(0);
-
-		*pflags |= PARAM_NAMED;
-
-		c = lex_peek_unichar(0);
-	}
-
-	if (c == -1) {
-		croak("In %"SVf": unterminated parameter list", SVfARG(declarator));
-	}
-
-	if (!(c == '$' || c == '@' || c == '%')) {
-		croak("In %"SVf": unexpected '%c' in parameter list (expecting a sigil)", SVfARG(declarator), (int)c);
-	}
-
-	sigil = c;
-
-	lex_read_unichar(0);
-	lex_read_space(0);
-
-	if (!(name = my_scan_word(aTHX_ sen, FALSE))) {
-		croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
-	}
-	sv_insert(name, 0, 0, &sigil, 1);
-	*pname = name;
 
 	lex_read_space(0);
 	c = lex_peek_unichar(0);
 
-	if (c == '=') {
+	if (c == ',') {
 		lex_read_unichar(0);
 		lex_read_space(0);
-
-
-		if (!param_spec->invocant.name && SvTRUE(spec->shift)) {
-			param_spec->invocant.name = spec->shift;
-			param_spec->invocant.padoff = pad_add_name_sv(param_spec->invocant.name, 0, NULL, NULL);
-		}
-
-		op_guard_update(ginit, parse_termexpr(0));
-
-		lex_read_space(0);
-		c = lex_peek_unichar(0);
-	}
-
-	if (c == ':') {
-		*pflags |= PARAM_INVOCANT;
-		lex_read_unichar(0);
-		lex_read_space(0);
-	} else if (c == ',') {
-		lex_read_unichar(0);
-		lex_read_space(0);
-	} else if (c != ')') {
+	} else if (c != end_delim) {
 		if (c == -1) {
 			croak("In %"SVf": unterminated parameter list", SVfARG(declarator));
 		}
@@ -882,6 +807,7 @@ static PADOFFSET parse_param(
 
 	return pad_add_name_sv(*pname, IF_HAVE_PERL_5_16(padadd_NO_DUP_CHECK, 0), NULL, NULL);
 }
+/* }}} */
 
 static OP *my_var_g(pTHX_ I32 type, I32 flags, PADOFFSET padoff) {
 	OP *var = newOP(type, flags);
@@ -1109,6 +1035,19 @@ static void register_info(pTHX_ UV key, SV *declarator, const KWSpec *kws, const
 	LEAVE;
 }
 
+/* {{{ end_delimiter */
+static I32 end_delimiter ( I32 start_delim ) {
+	switch (start_delim) {
+		/* Handle the balanced characters specially. */
+		case '(':	return ')';
+		case '{':	return '}';
+		case '<':	return '>';
+		case '[':	return ']';
+		default:	return start_delim;
+	}
+}
+/* }}} */
+
 /* {{{ parse_fun */
 static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRLEN keyword_len, const KWSpec *spec) {
 	ParamSpec *param_spec;
@@ -1116,6 +1055,7 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	I32 floor_ix;
 	OpGuard *prelude_sentinel;
 	I32 c;
+	I32 start_delim;
 
 	declarator =
 		sentinel_mortalize(sen, newSVpvn(keyword_ptr, keyword_len));
@@ -1134,8 +1074,16 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	param_spec = NULL;
 
 	c = lex_peek_unichar(0);
-	if (c == '(') {
+	/* Skip whitespace after the token, but this is a special case now. */
+	if (c == ' ') {
+		lex_read_unichar(0);
+		c = lex_peek_unichar(0);
+	}
+	
+	if (c == '(' || c == '<') {
+		I32 start_delim = c;
 		OpGuard *init_sentinel;
+		I32 end_delim = end_delimiter(c);
 
 		Newx(init_sentinel, 1, OpGuard);
 		op_guard_init(init_sentinel);
@@ -1148,13 +1096,13 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 		lex_read_unichar(0);
 		lex_read_space(0);
 
-		while ((c = lex_peek_unichar(0)) != ')') {
+		while ((c = lex_peek_unichar(0)) != end_delim) {
 			int flags;
 			SV *name, *type;
 			char sigil;
 			PADOFFSET padoff;
 
-			padoff = parse_param(aTHX_ sen, declarator, spec, param_spec, &flags, &name, init_sentinel, &type);
+			padoff = parse_param(aTHX_ sen, declarator, spec, param_spec, &flags, &name, init_sentinel, &type, start_delim, end_delim);
 
 			S_intro_my(aTHX);
 
@@ -1276,6 +1224,7 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 }
 /* }}} */
 
+/* {{{ kw_flags_enter */
 static int kw_flags_enter(pTHX_ Sentinel sen, const char *kw_ptr, STRLEN kw_len, KWSpec *spec) {
 	HV *hints;
 	SV *sv, **psv;
@@ -1353,6 +1302,7 @@ static int kw_flags_enter(pTHX_ Sentinel sen, const char *kw_ptr, STRLEN kw_len,
 	}
 	return FALSE;
 }
+/* }}} */
 
 static int my_keyword_plugin(pTHX_ char *keyword_ptr, STRLEN keyword_len, OP **op_ptr) {
 	Sentinel sen = { NULL };
