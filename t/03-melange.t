@@ -7,8 +7,21 @@ use strict;
 
 use JGoff::Keyword::Qqw;
 
-my @id_1 = qqw ($x);
-is_deeply [@id_1], [qw(a b)];
+#{ my $x = 'b';
+#  my @start = qqw(a $x c);
+#  is_deeply [@start], [qw(a b c)];
+#}
+
+#{ my $x = 'a';
+#  my @start = qqw($x b $x);
+#  is_deeply [@start], [qw(a b a)];
+#}
+
+#{ my $x = 'b';
+#  my $y = 'c';
+#  my @start = qqw(a $x $y d);
+#  is_deeply [@start], [qw(a b c d)];
+#}
 
 my @id_2 = qqw
  (
@@ -30,3 +43,6 @@ is_deeply [@mymap], [qw(a b)];
 
 my @balanced_1 = qqw<$fun>;
 is_deeply [@balanced_1], [qw(a b)];
+
+my @balanced_2 = qqw[$fun];
+is_deeply [@balanced_2], [qw(a b)];

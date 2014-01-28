@@ -1080,7 +1080,7 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 		c = lex_peek_unichar(0);
 	}
 	
-	if (c == '(' || c == '<') {
+	if ( 1 ) { /* Pretty much any character should work at this point. */
 		I32 start_delim = c;
 		OpGuard *init_sentinel;
 		I32 end_delim = end_delimiter(c);
