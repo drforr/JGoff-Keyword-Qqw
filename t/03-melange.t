@@ -12,6 +12,8 @@ use JGoff::Keyword::Qqw;
 #  is_deeply [@start], [qw(a b c)];
 #}
 
+# Two copies of the same variable, shouldn't cause a problem but who knows?
+#
 #{ my $x = 'a';
 #  my @start = qqw($x b $x);
 #  is_deeply [@start], [qw(a b a)];
@@ -20,6 +22,18 @@ use JGoff::Keyword::Qqw;
 #{ my $x = 'b';
 #  my $y = 'c';
 #  my @start = qqw(a $x $y d);
+#  is_deeply [@start], [qw(a b c d)];
+#}
+
+#{ my @x = qw(b c);
+#  my @start = qqw(a @x d);
+#  is_deeply [@start], [qw(a b c d)];
+#}
+
+# Test just one hash pair
+#
+#{ my %x = qw(b c);
+#  my @start = qqw(a %x d);
 #  is_deeply [@start], [qw(a b c d)];
 #}
 

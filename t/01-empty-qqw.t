@@ -17,7 +17,11 @@ is_deeply [qqw%%], ['a', 'b'];
 is_deeply [qqw&&], ['a', 'b'];
 #is_deeply [qqw´´], ['a', 'b'];
 is_deeply [qqw()], ['a', 'b']; # Special case
+#is_deeply [qqw(())], ['a', 'b']; # Double secret special case
+#is_deeply [qqw(()())], ['a', 'b']; # Double secret special case
 is_deeply [qqw))], ['a', 'b']; # Make sure ')' still behaves.
+                               # Also, notice that the backward versions don't
+                               # nest
 is_deeply [qqw**], ['a', 'b'];
 is_deeply [qqw++], ['a', 'b'];
 is_deeply [qqw,,], ['a', 'b'];
@@ -35,11 +39,14 @@ is_deeply [qqw 66], ['a', 'b'];
 is_deeply [qqw 77], ['a', 'b'];
 is_deeply [qqw 88], ['a', 'b'];
 is_deeply [qqw 99], ['a', 'b'];
-#is_deeply [qqw::], ['a', 'b']; # XXX aiyee, rabbit hole here.
-                                # XXX C< qw:a b c:; > is legitimate, but the
-                                # XXX keyword interceptor won't work?
+#is_deeply [qqw::],  ['a', 'b']; # XXX aiyee, rabbit hole here.
+                                 # XXX C< qw:a b c:; > is legitimate, but the
+                                 # XXX keyword interceptor won't work?
 is_deeply [qqw;;], ['a', 'b']; # Special case
-is_deeply [qqw<>], ['a', 'b']; # Another special case
+is_deeply [qqw<>], ['a', 'b']; # Balanced delimiter
+#is_deeply [qqw<<>>], ['a', 'b']; # Balanced delimiters can nest
+#is_deeply [qqw<<<>>>], ['a', 'b']; # Go deeper
+#is_deeply [qqw<<><>>], ['a', 'b']; # Nesting can occur twice
 is_deeply [qqw==], ['a', 'b'];
 is_deeply [qqw>>], ['a', 'b']; # Make sure unbalanced still works.
 is_deeply [qqw??], ['a', 'b'];
@@ -72,7 +79,10 @@ is_deeply [qqw WW], ['a', 'b'];
 is_deeply [qqw XX], ['a', 'b'];
 is_deeply [qqw YY], ['a', 'b'];
 is_deeply [qqw ZZ], ['a', 'b'];
-is_deeply [qqw[]], ['a', 'b']; # Special case
+is_deeply [qqw[]], ['a', 'b']; # Balanced delimiters
+#is_deeply [qqw[[]]], ['a', 'b']; # Balanced delimiters can nest
+#is_deeply [qqw[[[]]]], ['a', 'b']; # Doubly nested
+#is_deeply [qqw[[][]]], ['a', 'b']; # Twin balanced
 # \\ doesn't work
 is_deeply [qqw]]], ['a', 'b']; # Non-balanced version
 is_deeply [qqw^^], ['a', 'b'];
@@ -106,7 +116,10 @@ is_deeply [qqw ww], ['a', 'b'];
 is_deeply [qqw xx], ['a', 'b'];
 is_deeply [qqw yy], ['a', 'b'];
 is_deeply [qqw zz], ['a', 'b'];
-is_deeply [qqw{}], ['a', 'b'];
+is_deeply [qqw{}], ['a', 'b']; # Balanced delimiter
+#is_deeply [qqw{{}}], ['a', 'b']; # Balanced delimiters can nest
+#is_deeply [qqw{{{}}}], ['a', 'b']; # Go deeper
+#is_deeply [qqw{{}{}}], ['a', 'b']; # Two nested pairs
 is_deeply [qqw||], ['a', 'b'];
 is_deeply [qqw}}], ['a', 'b'];
 is_deeply [qqw~~], ['a', 'b'];

@@ -204,18 +204,7 @@ static void free_op_guard_void(pTHX_ void *vp) {
 	Safefree(p);
 }
 
-static void free_op_void(pTHX_ void *vp) {
-	OP *p = vp;
-	op_free(p);
-}
-
 #define sv_eq_pvs(SV, S) my_sv_eq_pvn(aTHX_ SV, "" S "", sizeof (S) - 1)
-
-static int my_sv_eq_pvn(pTHX_ SV *sv, const char *p, STRLEN n) {
-	STRLEN sv_len;
-	const char *sv_p = SvPV(sv, sv_len);
-	return memcmp(sv_p, p, n) == 0;
-}
 
 
 #include "padop_on_crack.c.inc"
@@ -289,261 +278,7 @@ static SV *my_scan_word(pTHX_ Sentinel sen, bool allow_package) {
 	return SvCUR(sv) ? sv : NULL;
 }
 
-static SV *my_scan_parens_tail(pTHX_ Sentinel sen, bool keep_backslash) {
-	I32 c, nesting;
-	SV *sv;
-	line_t start;
-
-	start = CopLINE(PL_curcop);
-
-	sv = sentinel_mortalize(sen, newSVpvs(""));
-	if (lex_bufutf8()) {
-		SvUTF8_on(sv);
-	}
-
-	nesting = 0;
-	for (;;) {
-		c = lex_read_unichar(0);
-		if (c == EOF) {
-			CopLINE_set(PL_curcop, start);
-			return NULL;
-		}
-
-		if (c == '\\') {
-			c = lex_read_unichar(0);
-			if (c == EOF) {
-				CopLINE_set(PL_curcop, start);
-				return NULL;
-			}
-			if (keep_backslash || (c != '(' && c != ')')) {
-				sv_catpvs(sv, "\\");
-			}
-		} else if (c == '(') {
-			nesting++;
-		} else if (c == ')') {
-			if (!nesting) {
-				break;
-			}
-			nesting--;
-		}
-
-		my_sv_cat_c(aTHX_ sv, c);
-	}
-
-	return sv;
-}
-
-static void my_check_prototype(pTHX_ Sentinel sen, const SV *declarator, SV *proto) {
-	char *start, *r, *w, *end;
-	STRLEN len;
-
-	/* strip spaces */
-	start = SvPV(proto, len);
-	end = start + len;
-
-	for (w = r = start; r < end; r++) {
-		if (!isSPACE(*r)) {
-			*w++ = *r;
-		}
-	}
-	*w = '\0';
-	SvCUR_set(proto, w - start);
-	end = w;
-	len = end - start;
-
-	if (!ckWARN(WARN_ILLEGALPROTO)) {
-		return;
-	}
-
-	/* check for bad characters */
-	if (strspn(start, "$@%*;[]&\\_+") != len) {
-		SV *dsv = sentinel_mortalize(sen, newSVpvs(""));
-		warner(
-			packWARN(WARN_ILLEGALPROTO),
-			"Illegal character in prototype for %"SVf" : %s",
-			SVfARG(declarator),
-			SvUTF8(proto)
-				? sv_uni_display(
-					dsv,
-					proto,
-					len,
-					UNI_DISPLAY_ISPRINT
-				)
-				: pv_pretty(dsv, start, len, 60, NULL, NULL,
-					PERL_PV_ESCAPE_NONASCII
-				)
-		);
-		return;
-	}
-
-	for (r = start; r < end; r++) {
-		switch (*r) {
-			default:
-				warner(
-					packWARN(WARN_ILLEGALPROTO),
-					"Illegal character in prototype for %"SVf" : %s",
-					SVfARG(declarator), r
-				);
-				return;
-
-			case '_':
-				if (r[1] && !strchr(";@%", *r)) {
-					warner(
-						packWARN(WARN_ILLEGALPROTO),
-						"Illegal character after '_' in prototype for %"SVf" : %s",
-						SVfARG(declarator), r
-					);
-					return;
-				}
-				break;
-
-			case '@':
-			case '%':
-				if (r[1]) {
-					warner(
-						packWARN(WARN_ILLEGALPROTO),
-						"prototype after '%c' for %"SVf": %s",
-						*r, SVfARG(declarator), r + 1
-					);
-					return;
-				}
-				break;
-
-			case '\\':
-				r++;
-				if (strchr("$@%&*", *r)) {
-					break;
-				}
-				if (*r == '[') {
-					r++;
-					for (; r < end && *r != ']'; r++) {
-						if (!strchr("$@%&*", *r)) {
-							break;
-						}
-					}
-					if (*r == ']' && r[-1] != '[') {
-						break;
-					}
-				}
-				warner(
-					packWARN(WARN_ILLEGALPROTO),
-					"Illegal character after '\\' in prototype for %"SVf" : %s",
-					SVfARG(declarator), r
-				);
-				return;
-
-			case '$':
-			case '*':
-			case '&':
-			case ';':
-			case '+':
-				break;
-		}
-	}
-}
-
 static SV *parse_type(pTHX_ Sentinel, const SV *);
-
-static SV *parse_type_paramd(pTHX_ Sentinel sen, const SV *declarator) {
-	I32 c;
-	SV *t;
-
-	t = my_scan_word(aTHX_ sen, TRUE);
-	lex_read_space(0);
-
-	c = lex_peek_unichar(0);
-	if (c == '[') {
-		SV *u;
-
-		lex_read_unichar(0);
-		lex_read_space(0);
-		my_sv_cat_c(aTHX_ t, c);
-
-		u = parse_type(aTHX_ sen, declarator);
-		sv_catsv(t, u);
-
-		c = lex_peek_unichar(0);
-		if (c != ']') {
-			croak("In %"SVf": missing ']' after '%"SVf"'", SVfARG(declarator), SVfARG(t));
-		}
-		lex_read_unichar(0);
-		lex_read_space(0);
-
-		my_sv_cat_c(aTHX_ t, c);
-	}
-
-	return t;
-}
-
-static SV *parse_type(pTHX_ Sentinel sen, const SV *declarator) {
-	I32 c;
-	SV *t;
-
-	t = parse_type_paramd(aTHX_ sen, declarator);
-
-	c = lex_peek_unichar(0);
-	while (c == '|') {
-		SV *u;
-
-		lex_read_unichar(0);
-		lex_read_space(0);
-
-		my_sv_cat_c(aTHX_ t, c);
-		u = parse_type_paramd(aTHX_ sen, declarator);
-		sv_catsv(t, u);
-
-		c = lex_peek_unichar(0);
-	}
-
-	return t;
-}
-
-static SV *reify_type(pTHX_ Sentinel sen, const SV *declarator, const KWSpec *spec, SV *name) {
-	AV *type_reifiers;
-	SV *t, *sv, **psv;
-	int n;
-	dSP;
-
-	type_reifiers = get_av(MY_PKG "::type_reifiers", 0);
-	assert(type_reifiers != NULL);
-
-	if (spec->reify_type < 0 || spec->reify_type > av_len(type_reifiers)) {
-		croak("In %"SVf": internal error: reify_type [%ld] out of range [%ld]", SVfARG(declarator), (long)spec->reify_type, (long)(av_len(type_reifiers) + 1));
-	}
-
-	psv = av_fetch(type_reifiers, spec->reify_type, 0);
-	assert(psv != NULL);
-	sv = *psv;
-
-	ENTER;
-	SAVETMPS;
-
-	PUSHMARK(SP);
-	EXTEND(SP, 2);
-	PUSHs(name);
-	PUSHs(PL_curstname);
-	PUTBACK;
-
-	n = call_sv(sv, G_SCALAR);
-	SPAGAIN;
-
-	assert(n == 1);
-	/* don't warn about n being unused if assert() is compiled out */
-	n = n;
-
-	t = sentinel_mortalize(sen, SvREFCNT_inc(POPs));
-
-	PUTBACK;
-	FREETMPS;
-	LEAVE;
-
-	if (!SvTRUE(t)) {
-		croak("In %"SVf": undefined type '%"SVf"'", SVfARG(declarator), SVfARG(name));
-	}
-
-	return t;
-}
-
 
 DEFSTRUCT(Param) {
 	SV *name;
@@ -591,6 +326,7 @@ static void p_init(Param *p) {
 	p->type = NULL;
 }
 
+/* {{{ ps_init */
 static void ps_init(ParamSpec *ps) {
 	p_init(&ps->invocant);
 	pv_init(&ps->positional_required);
@@ -600,6 +336,7 @@ static void ps_init(ParamSpec *ps) {
 	p_init(&ps->slurpy);
 	ps->rest_hash = NOT_IN_PAD;
 }
+/* }}} */
 
 #define DEFVECTOR_EXTEND(N, B) static B (*N(VEC(B) *p)) { \
 	assert(p->used <= p->size); \
@@ -638,6 +375,7 @@ static void pi_clear(pTHX_ ParamInit *pi) {
 DEFVECTOR_CLEAR(pv_clear, Param, p_clear);
 DEFVECTOR_CLEAR(piv_clear, ParamInit, pi_clear);
 
+/* {{{ ps_clear */
 static void ps_clear(pTHX_ ParamSpec *ps) {
 	p_clear(aTHX_ &ps->invocant);
 
@@ -649,7 +387,9 @@ static void ps_clear(pTHX_ ParamSpec *ps) {
 
 	p_clear(aTHX_ &ps->slurpy);
 }
+/* }}} */
 
+/* {{{ ps_contains */
 static int ps_contains(pTHX_ const ParamSpec *ps, SV *sv) {
 	size_t i, lim;
 
@@ -683,69 +423,15 @@ static int ps_contains(pTHX_ const ParamSpec *ps, SV *sv) {
 
 	return 0;
 }
+/* }}} */
 
 static void ps_free_void(pTHX_ void *p) {
 	ps_clear(aTHX_ p);
 	Safefree(p);
 }
 
-static int args_min(pTHX_ const ParamSpec *ps, const KWSpec *ks) {
-	int n = 0;
-	if (!ps) {
-		return SvTRUE(ks->shift) ? 1 : 0;
-	}
-	if (ps->invocant.name) {
-		n++;
-	}
-	n += ps->positional_required.used;
-	n += ps->named_required.used * 2;
-	return n;
-}
-
-static int args_max(const ParamSpec *ps) {
-	int n = 0;
-	if (!ps) {
-		return -1;
-	}
-	if (ps->invocant.name) {
-		n++;
-	}
-	n += ps->positional_required.used;
-	n += ps->positional_optional.used;
-	if (ps->named_required.used || ps->named_optional.used || ps->slurpy.name) {
-		n = -1;
-	}
-	return n;
-}
-
-static size_t count_positional_params(const ParamSpec *ps) {
-	return ps->positional_required.used + ps->positional_optional.used;
-}
-
 static size_t count_named_params(const ParamSpec *ps) {
 	return ps->named_required.used + ps->named_optional.used;
-}
-
-static SV *my_eval(pTHX_ Sentinel sen, I32 floor, OP *op) {
-	SV *sv;
-	CV *cv;
-	dSP;
-
-	cv = newATTRSUB(floor, NULL, NULL, NULL, op);
-
-	ENTER;
-	SAVETMPS;
-
-	PUSHMARK(SP);
-	call_sv((SV *)cv, G_SCALAR | G_NOARGS);
-	SPAGAIN;
-	sv = sentinel_mortalize(sen, SvREFCNT_inc(POPs));
-
-	PUTBACK;
-	FREETMPS;
-	LEAVE;
-
-	return sv;
 }
 
 enum {
@@ -809,92 +495,7 @@ static PADOFFSET parse_param(
 }
 /* }}} */
 
-static OP *my_var_g(pTHX_ I32 type, I32 flags, PADOFFSET padoff) {
-	OP *var = newOP(type, flags);
-	var->op_targ = padoff;
-	return var;
-}
-
-static OP *my_var(pTHX_ I32 flags, PADOFFSET padoff) {
-	return my_var_g(aTHX_ OP_PADSV, flags, padoff);
-}
-
-static OP *mkhvelem(pTHX_ PADOFFSET h, OP *k) {
-	OP *hv = my_var_g(aTHX_ OP_PADHV, OPf_REF, h);
-	return newBINOP(OP_HELEM, 0, hv, k);
-}
-
-static OP *mkconstsv(pTHX_ SV *sv) {
-	return newSVOP(OP_CONST, 0, sv);
-}
-
-static OP *mkconstiv(pTHX_ IV i) {
-	return mkconstsv(aTHX_ newSViv(i));
-}
-
-static OP *mkconstpv(pTHX_ const char *p, size_t n) {
-	return mkconstsv(aTHX_ newSVpv(p, n));
-}
-
-#define mkconstpvs(S) mkconstpv(aTHX_ "" S "", sizeof S - 1)
-
-static OP *mktypecheck(pTHX_ const SV *declarator, int nr, SV *name, PADOFFSET padoff, SV *type) {
-	/* $type->check($value) or Carp::croak "...: " . $type->get_message($value) */
-	OP *chk, *err, *msg, *xcroak;
-
-	err = mkconstsv(aTHX_ newSVpvf("In %"SVf": parameter %d (%"SVf"): ", SVfARG(declarator), nr, SVfARG(name)));
-	{
-		OP *args = NULL;
-
-		args = op_append_elem(OP_LIST, args, mkconstsv(aTHX_ SvREFCNT_inc_simple_NN(type)));
-		args = op_append_elem(
-			OP_LIST, args,
-			padoff == NOT_IN_PAD
-				? S_newDEFSVOP(aTHX)
-				: my_var(aTHX_ 0, padoff)
-		);
-		args = op_append_elem(OP_LIST, args, newUNOP(OP_METHOD, 0, mkconstpvs("get_message")));
-
-		msg = args;
-		msg->op_type = OP_ENTERSUB;
-		msg->op_ppaddr = PL_ppaddr[OP_ENTERSUB];
-		msg->op_flags |= OPf_STACKED;
-	}
-
-	msg = newBINOP(OP_CONCAT, 0, err, msg);
-
-	xcroak = newCVREF(
-		OPf_WANT_SCALAR,
-		newGVOP(OP_GV, 0, gv_fetchpvs("Carp::croak", 0, SVt_PVCV))
-	);
-	xcroak = newUNOP(OP_ENTERSUB, OPf_STACKED, op_append_elem(OP_LIST, msg, xcroak));
-
-	{
-		OP *args = NULL;
-
-		args = op_append_elem(OP_LIST, args, mkconstsv(aTHX_ SvREFCNT_inc_simple_NN(type)));
-		args = op_append_elem(
-			OP_LIST, args,
-			padoff == NOT_IN_PAD
-				? S_newDEFSVOP(aTHX)
-				: my_var(aTHX_ 0, padoff)
-		);
-		args = op_append_elem(OP_LIST, args, newUNOP(OP_METHOD, 0, mkconstpvs("check")));
-
-		chk = args;
-		chk->op_type = OP_ENTERSUB;
-		chk->op_ppaddr = PL_ppaddr[OP_ENTERSUB];
-		chk->op_flags |= OPf_STACKED;
-	}
-
-	chk = newLOGOP(OP_OR, 0, chk, xcroak);
-	return chk;
-}
-
-static OP *mktypecheckp(pTHX_ const SV *declarator, int nr, const Param *param) {
-	return mktypecheck(aTHX_ declarator, nr, param->name, param->padoff, param->type);
-}
-
+/* {{{ register_info */
 static void register_info(pTHX_ UV key, SV *declarator, const KWSpec *kws, const ParamSpec *ps) {
 	dSP;
 
@@ -1034,6 +635,7 @@ static void register_info(pTHX_ UV key, SV *declarator, const KWSpec *kws, const
 	FREETMPS;
 	LEAVE;
 }
+/* }}} */
 
 /* {{{ end_delimiter */
 static I32 end_delimiter ( I32 start_delim ) {
@@ -1304,6 +906,7 @@ static int kw_flags_enter(pTHX_ Sentinel sen, const char *kw_ptr, STRLEN kw_len,
 }
 /* }}} */
 
+/* {{{ my_keyword_plugin */
 static int my_keyword_plugin(pTHX_ char *keyword_ptr, STRLEN keyword_len, OP **op_ptr) {
 	Sentinel sen = { NULL };
 	KWSpec spec;
@@ -1321,6 +924,7 @@ static int my_keyword_plugin(pTHX_ char *keyword_ptr, STRLEN keyword_len, OP **o
 
 	return ret;
 }
+/* }}} */
 
 #ifndef SvREFCNT_dec_NN
 #define SvREFCNT_dec_NN(SV) SvREFCNT_dec(SV)
