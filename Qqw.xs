@@ -144,10 +144,6 @@ static Resource *sentinel_register(Sentinel sen, void *data, void (*destroy)(pTH
 	return cur;
 }
 
-static void sentinel_disarm(Resource *p) {
-	p->destroy = NULL;
-}
-
 static void my_sv_refcnt_dec_void(pTHX_ void *p) {
 	SV *sv = p;
 	SvREFCNT_dec(sv);
@@ -157,7 +153,6 @@ static SV *sentinel_mortalize(Sentinel sen, SV *sv) {
 	sentinel_register(sen, sv, my_sv_refcnt_dec_void);
 	return sv;
 }
-
 
 #if HAVE_PERL_VERSION(5, 17, 2)
  #define MY_OP_SLABBED(O) ((O)->op_slabbed)
@@ -181,17 +176,6 @@ static OpGuard op_guard_transfer(OpGuard *p) {
 	return r;
 }
 
-static OP *op_guard_relinquish(OpGuard *p) {
-	OP *o = p->op;
-	op_guard_init(p);
-	return o;
-}
-
-static void op_guard_update(OpGuard *p, OP *o) {
-	p->op = o;
-	p->needs_freed = o && !MY_OP_SLABBED(o);
-}
-
 static void op_guard_clear(pTHX_ OpGuard *p) {
 	if (p->needs_freed) {
 		op_free(p->op);
@@ -209,7 +193,6 @@ static void free_op_guard_void(pTHX_ void *vp) {
 
 #include "padop_on_crack.c.inc"
 
-
 enum {
 	MY_ATTR_LVALUE = 0x01,
 	MY_ATTR_METHOD = 0x02,
@@ -224,7 +207,6 @@ static void my_sv_cat_c(pTHX_ SV *sv, U32 c) {
 	}
 	sv_catpvn(sv, ds, d - ds);
 }
-
 
 #define MY_UNI_IDFIRST(C) isIDFIRST_uni(C)
 #define MY_UNI_IDCONT(C)  isALNUM_uni(C)
@@ -308,11 +290,7 @@ DEFVECTOR(ParamInit);
 } static void N(VEC(B) *)
 
 DEFSTRUCT(ParamSpec) {
-	Param invocant;
-	VEC(Param) positional_required;
-	VEC(ParamInit) positional_optional;
-	VEC(Param) named_required;
-	VEC(ParamInit) named_optional;
+	VEC(ParamInit) positional_optional; /* JMG stuff them here */
 	Param slurpy;
 	PADOFFSET rest_hash;
 };
@@ -328,11 +306,7 @@ static void p_init(Param *p) {
 
 /* {{{ ps_init */
 static void ps_init(ParamSpec *ps) {
-	p_init(&ps->invocant);
-	pv_init(&ps->positional_required);
 	piv_init(&ps->positional_optional);
-	pv_init(&ps->named_required);
-	piv_init(&ps->named_optional);
 	p_init(&ps->slurpy);
 	ps->rest_hash = NOT_IN_PAD;
 }
@@ -377,14 +351,7 @@ DEFVECTOR_CLEAR(piv_clear, ParamInit, pi_clear);
 
 /* {{{ ps_clear */
 static void ps_clear(pTHX_ ParamSpec *ps) {
-	p_clear(aTHX_ &ps->invocant);
-
-	pv_clear(aTHX_ &ps->positional_required);
 	piv_clear(aTHX_ &ps->positional_optional);
-
-	pv_clear(aTHX_ &ps->named_required);
-	piv_clear(aTHX_ &ps->named_optional);
-
 	p_clear(aTHX_ &ps->slurpy);
 }
 /* }}} */
@@ -393,30 +360,8 @@ static void ps_clear(pTHX_ ParamSpec *ps) {
 static int ps_contains(pTHX_ const ParamSpec *ps, SV *sv) {
 	size_t i, lim;
 
-	if (ps->invocant.name && sv_eq(sv, ps->invocant.name)) {
-		return 1;
-	}
-
-	for (i = 0, lim = ps->positional_required.used; i < lim; i++) {
-		if (sv_eq(sv, ps->positional_required.data[i].name)) {
-			return 1;
-		}
-	}
-
 	for (i = 0, lim = ps->positional_optional.used; i < lim; i++) {
 		if (sv_eq(sv, ps->positional_optional.data[i].param.name)) {
-			return 1;
-		}
-	}
-
-	for (i = 0, lim = ps->named_required.used; i < lim; i++) {
-		if (sv_eq(sv, ps->named_required.data[i].name)) {
-			return 1;
-		}
-	}
-
-	for (i = 0, lim = ps->named_optional.used; i < lim; i++) {
-		if (sv_eq(sv, ps->named_optional.data[i].param.name)) {
 			return 1;
 		}
 	}
@@ -428,10 +373,6 @@ static int ps_contains(pTHX_ const ParamSpec *ps, SV *sv) {
 static void ps_free_void(pTHX_ void *p) {
 	ps_clear(aTHX_ p);
 	Safefree(p);
-}
-
-static size_t count_named_params(const ParamSpec *ps) {
-	return ps->named_required.used + ps->named_optional.used;
 }
 
 enum {
@@ -448,7 +389,7 @@ static PADOFFSET parse_param(
 	I32 start_delim, I32 end_delim
 ) {
 	I32 c;
-	char sigil;
+	char sigil = 0;
 	SV *name;
 
 	assert(!ginit->op);
@@ -475,14 +416,24 @@ static PADOFFSET parse_param(
 			*pname = name;
 			break;
 		default:
+			if (!(name = my_scan_word(aTHX_ sen, FALSE))) {
+				croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
+			}
+			sv_insert(name, 0, 0, &sigil, 1);
+			*pname = name;
+			break;
+/*
 			croak("In %"SVf": unexpected '%c' in parameter list (expecting a sigil)", SVfARG(declarator), (int)c);
+*/
 	}
 
 	lex_read_space(0);
-	c = lex_peek_unichar(0);
-
+/*
 	if (c == ',') {
 		lex_read_unichar(0);
+		lex_read_space(0);
+        }
+	else if (c == ' ') {
 		lex_read_space(0);
 	} else if (c != end_delim) {
 		if (c == -1) {
@@ -490,6 +441,7 @@ static PADOFFSET parse_param(
 		}
 		croak("In %"SVf": unexpected '%c' in parameter list (expecting ',')", SVfARG(declarator), (int)c);
 	}
+*/
 
 	return pad_add_name_sv(*pname, IF_HAVE_PERL_5_16(padadd_NO_DUP_CHECK, 0), NULL, NULL);
 }
@@ -529,37 +481,8 @@ static void register_info(pTHX_ UV key, SV *declarator, const KWSpec *kws, const
 		mPUSHp("@_", 2);
 		PUSHmortal;
 	} else {
-		/* 2, 3 */ {
-			if (ps->invocant.name) {
-				PUSHs(ps->invocant.name);
-				if (ps->invocant.type) {
-					PUSHs(ps->invocant.type);
-				} else {
-					PUSHmortal;
-				}
-			} else {
-				PUSHmortal;
-				PUSHmortal;
-			}
-		}
-		/* 4 */ {
-			size_t i, lim;
-			AV *av;
-
-			lim = ps->positional_required.used;
-
-			av = newAV();
-			if (lim) {
-				av_extend(av, (lim - 1) * 2);
-				for (i = 0; i < lim; i++) {
-					Param *cur = &ps->positional_required.data[i];
-					av_push(av, SvREFCNT_inc_simple_NN(cur->name));
-					av_push(av, cur->type ? SvREFCNT_inc_simple_NN(cur->type) : &PL_sv_undef);
-				}
-			}
-
-			mPUSHs(newRV_noinc((SV *)av));
-		}
+		/* 2, 3 */
+		/* 4 */
 		/* 5 */ {
 			size_t i, lim;
 			AV *av;
@@ -578,42 +501,8 @@ static void register_info(pTHX_ UV key, SV *declarator, const KWSpec *kws, const
 
 			mPUSHs(newRV_noinc((SV *)av));
 		}
-		/* 6 */ {
-			size_t i, lim;
-			AV *av;
-
-			lim = ps->named_required.used;
-
-			av = newAV();
-			if (lim) {
-				av_extend(av, (lim - 1) * 2);
-				for (i = 0; i < lim; i++) {
-					Param *cur = &ps->named_required.data[i];
-					av_push(av, SvREFCNT_inc_simple_NN(cur->name));
-					av_push(av, cur->type ? SvREFCNT_inc_simple_NN(cur->type) : &PL_sv_undef);
-				}
-			}
-
-			mPUSHs(newRV_noinc((SV *)av));
-		}
-		/* 7 */ {
-			size_t i, lim;
-			AV *av;
-
-			lim = ps->named_optional.used;
-
-			av = newAV();
-			if (lim) {
-				av_extend(av, (lim - 1) * 2);
-				for (i = 0; i < lim; i++) {
-					Param *cur = &ps->named_optional.data[i].param;
-					av_push(av, SvREFCNT_inc_simple_NN(cur->name));
-					av_push(av, cur->type ? SvREFCNT_inc_simple_NN(cur->type) : &PL_sv_undef);
-				}
-			}
-
-			mPUSHs(newRV_noinc((SV *)av));
-		}
+		/* 6 */
+		/* 7 */
 		/* 8, 9 */ {
 			if (ps->slurpy.name) {
 				PUSHs(ps->slurpy.name);
@@ -650,14 +539,14 @@ static I32 end_delimiter ( I32 start_delim ) {
 }
 /* }}} */
 
-/* {{{ parse_fun */
-static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRLEN keyword_len, const KWSpec *spec) {
+/* {{{ parse_qqw */
+static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRLEN keyword_len, const KWSpec *spec) {
 	ParamSpec *param_spec;
 	SV *declarator;
-	I32 floor_ix;
 	OpGuard *prelude_sentinel;
 	I32 c;
-	I32 start_delim;
+	I32 start_delim, end_delim;
+	OpGuard *init_sentinel;
 
 	declarator =
 		sentinel_mortalize(sen, newSVpvn(keyword_ptr, keyword_len));
@@ -677,144 +566,65 @@ static int parse_fun(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 
 	c = lex_peek_unichar(0);
 	/* Skip whitespace after the token, but this is a special case now. */
-	if (c == ' ') {
+	while (c == ' ') {
 		lex_read_unichar(0);
 		c = lex_peek_unichar(0);
 	}
 	
-	if ( 1 ) { /* Pretty much any character should work at this point. */
-		I32 start_delim = c;
-		OpGuard *init_sentinel;
-		I32 end_delim = end_delimiter(c);
+	start_delim = c;
+	end_delim = end_delimiter(c);
 
-		Newx(init_sentinel, 1, OpGuard);
-		op_guard_init(init_sentinel);
-		sentinel_register(sen, init_sentinel, free_op_guard_void);
+	Newx(init_sentinel, 1, OpGuard);
+	op_guard_init(init_sentinel);
+	sentinel_register(sen, init_sentinel, free_op_guard_void);
 
-		Newx(param_spec, 1, ParamSpec);
-		ps_init(param_spec);
-		sentinel_register(sen, param_spec, ps_free_void);
+	Newx(param_spec, 1, ParamSpec);
+	ps_init(param_spec);
+	sentinel_register(sen, param_spec, ps_free_void);
 
-		lex_read_unichar(0);
-		lex_read_space(0);
+	lex_read_unichar(0);
+	lex_read_space(0);
 
-		while ((c = lex_peek_unichar(0)) != end_delim) {
-			int flags;
-			SV *name, *type;
-			char sigil;
-			PADOFFSET padoff;
+	while ((c = lex_peek_unichar(0)) != end_delim) {
+		int flags;
+		SV *name, *type;
+		char sigil;
+		PADOFFSET padoff;
 
-			padoff = parse_param(aTHX_ sen, declarator, spec, param_spec, &flags, &name, init_sentinel, &type, start_delim, end_delim);
+		padoff = parse_param(aTHX_ sen, declarator, spec, param_spec, &flags, &name, init_sentinel, &type, start_delim, end_delim);
 
-			S_intro_my(aTHX);
+		S_intro_my(aTHX);
 
-			sigil = SvPV_nolen(name)[0];
+		sigil = SvPV_nolen(name)[0];
 
-			/* internal consistency */
-			if (flags & PARAM_NAMED) {
-				if (flags & PARAM_INVOCANT) {
-					croak("In %"SVf": invocant %"SVf" can't be a named parameter", SVfARG(declarator), SVfARG(name));
-				}
-				if (sigil != '$') {
-					croak("In %"SVf": named parameter %"SVf" can't be a%s", SVfARG(declarator), SVfARG(name), sigil == '@' ? "n array" : " hash");
-				}
-			} else if (flags & PARAM_INVOCANT) {
-				if (init_sentinel->op) {
-					croak("In %"SVf": invocant %"SVf" can't have a default value", SVfARG(declarator), SVfARG(name));
-				}
-				if (sigil != '$') {
-					croak("In %"SVf": invocant %"SVf" can't be a%s", SVfARG(declarator), SVfARG(name), sigil == '@' ? "n array" : " hash");
-				}
-			} else if (sigil != '$' && init_sentinel->op) {
-				croak("In %"SVf": %s %"SVf" can't have a default value", SVfARG(declarator), sigil == '@' ? "array" : "hash", SVfARG(name));
-			}
-
-			/* external constraints */
-			if (param_spec->slurpy.name) {
-				croak("In %"SVf": I was expecting \")\" after \"%"SVf"\", not \"%"SVf"\"", SVfARG(declarator), SVfARG(param_spec->slurpy.name), SVfARG(name));
-			}
-			if (sigil != '$') {
-				assert(!init_sentinel->op);
-				param_spec->slurpy.name = name;
-				param_spec->slurpy.padoff = padoff;
-				param_spec->slurpy.type = type;
-				continue;
-			}
-
-			if (!(flags & PARAM_NAMED) && count_named_params(param_spec)) {
-				croak("In %"SVf": positional parameter %"SVf" can't appear after named parameter %"SVf"", SVfARG(declarator), SVfARG(name), SVfARG((param_spec->named_required.used ? param_spec->named_required.data[0] : param_spec->named_optional.data[0].param).name));
-			}
-
-			if (flags & PARAM_INVOCANT) {
-				if (param_spec->invocant.name) {
-					croak("In %"SVf": invalid double invocants %"SVf", %"SVf"", SVfARG(declarator), SVfARG(param_spec->invocant.name), SVfARG(name));
-				}
-				if (count_positional_params(param_spec) || count_named_params(param_spec)) {
-					croak("In %"SVf": invocant %"SVf" must be first in parameter list", SVfARG(declarator), SVfARG(name));
-				}
-				if (!(spec->flags & FLAG_INVOCANT)) {
-					croak("In %"SVf": invocant %"SVf" not allowed here", SVfARG(declarator), SVfARG(name));
-				}
-				param_spec->invocant.name = name;
-				param_spec->invocant.padoff = padoff;
-				param_spec->invocant.type = type;
-				continue;
-			}
-
-			if (init_sentinel->op && !(spec->flags & FLAG_DEFAULT_ARGS)) {
-				croak("In %"SVf": default argument for %"SVf" not allowed here", SVfARG(declarator), SVfARG(name));
-			}
-
-			if (ps_contains(aTHX_ param_spec, name)) {
-				croak("In %"SVf": %"SVf" can't appear twice in the same parameter list", SVfARG(declarator), SVfARG(name));
-			}
-
-			if (flags & PARAM_NAMED) {
-				if (!(spec->flags & FLAG_NAMED_PARAMS)) {
-					croak("In %"SVf": named parameter :%"SVf" not allowed here", SVfARG(declarator), SVfARG(name));
-				}
-
-				if (init_sentinel->op) {
-					ParamInit *pi = piv_extend(&param_spec->named_optional);
-					pi->param.name = name;
-					pi->param.padoff = padoff;
-					pi->param.type = type;
-					pi->init = op_guard_transfer(init_sentinel);
-					param_spec->named_optional.used++;
-				} else {
-					Param *p;
-
-					if (param_spec->positional_optional.used) {
-						croak("In %"SVf": can't combine optional positional (%"SVf") and required named (%"SVf") parameters", SVfARG(declarator), SVfARG(param_spec->positional_optional.data[0].param.name), SVfARG(name));
-					}
-
-					p = pv_extend(&param_spec->named_required);
-					p->name = name;
-					p->padoff = padoff;
-					p->type = type;
-					param_spec->named_required.used++;
-				}
-			} else {
-				if (init_sentinel->op || param_spec->positional_optional.used) {
-					ParamInit *pi = piv_extend(&param_spec->positional_optional);
-					pi->param.name = name;
-					pi->param.padoff = padoff;
-					pi->param.type = type;
-					pi->init = op_guard_transfer(init_sentinel);
-					param_spec->positional_optional.used++;
-				} else {
-					Param *p = pv_extend(&param_spec->positional_required);
-					p->name = name;
-					p->padoff = padoff;
-					p->type = type;
-					param_spec->positional_required.used++;
-				}
-			}
-
+		/* external constraints */
+		if (param_spec->slurpy.name) {
+			croak("In %"SVf": I was expecting \"%c\" after \"%"SVf"\", not \"%"SVf"\"", SVfARG(declarator), end_delim, SVfARG(param_spec->slurpy.name), SVfARG(name));
 		}
-		lex_read_unichar(0);
-		lex_read_space(0);
+		if (sigil != '$') {
+			assert(!init_sentinel->op);
+			param_spec->slurpy.name = name;
+			param_spec->slurpy.padoff = padoff;
+			param_spec->slurpy.type = type;
+			continue;
+		}
+
+		if (init_sentinel->op && !(spec->flags & FLAG_DEFAULT_ARGS)) {
+			croak("In %"SVf": default argument for %"SVf" not allowed here", SVfARG(declarator), SVfARG(name));
+		}
+
+		if (init_sentinel->op || param_spec->positional_optional.used) {
+			ParamInit *pi = piv_extend(&param_spec->positional_optional);
+			pi->param.name = name;
+			pi->param.padoff = padoff;
+			pi->param.type = type;
+			pi->init = op_guard_transfer(init_sentinel);
+			param_spec->positional_optional.used++;
+		}
+
 	}
+	lex_read_unichar(0);
+	lex_read_space(0);
 
 	/* it's go time. */
 	*pop = newSVOP( OP_CONST, 0, newSVpvn_flags( "a", 1, 0 ) );
@@ -914,7 +724,7 @@ static int my_keyword_plugin(pTHX_ char *keyword_ptr, STRLEN keyword_len, OP **o
 
 	if (kw_flags_enter(aTHX_ sen, keyword_ptr, keyword_len, &spec)) {
 		/* scope was entered, 'sen' and 'spec' are initialized */
-		ret = parse_fun(aTHX_ sen, op_ptr, keyword_ptr, keyword_len, &spec);
+		ret = parse_qqw(aTHX_ sen, op_ptr, keyword_ptr, keyword_len, &spec);
 		FREETMPS;
 		LEAVE;
 	} else {

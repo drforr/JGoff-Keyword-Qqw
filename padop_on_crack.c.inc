@@ -9,39 +9,6 @@
 #define COP_SEQ_RANGE_HIGH_set(SV, VAL) \
 	STMT_START { ((XPVNV*)SvANY(SV))->xnv_u.xpad_cop_seq.xhigh = (VAL); } STMT_END
 
-static void S_pad_block_start(pTHX_ int full) {
-	dVAR;
-	ASSERT_CURPAD_ACTIVE("pad_block_start");
-	SAVEI32(PL_comppad_name_floor);
-	PL_comppad_name_floor = AvFILLp(PL_comppad_name);
-	if (full)
-		PL_comppad_name_fill = PL_comppad_name_floor;
-	if (PL_comppad_name_floor < 0)
-		PL_comppad_name_floor = 0;
-	SAVEI32(PL_min_intro_pending);
-	SAVEI32(PL_max_intro_pending);
-	PL_min_intro_pending = 0;
-	SAVEI32(PL_comppad_name_fill);
-	SAVEI32(PL_padix_floor);
-	PL_padix_floor = PL_padix;
-	PL_pad_reset_pending = FALSE;
-}
-
-static int S_block_start(pTHX_ int full) {
-	dVAR;
-	const int retval = PL_savestack_ix;
-
-	S_pad_block_start(aTHX_ full);
-	SAVEHINTS();
-	PL_hints &= ~HINT_BLOCK_SCOPE;
-	SAVECOMPILEWARNINGS();
-	PL_compiling.cop_warnings = DUP_WARNINGS(PL_compiling.cop_warnings);
-
-	CALL_BLOCK_HOOKS(bhk_start, full);
-
-	return retval;
-}
-
 /* Check for in place reverse and sort assignments like "@a = reverse @a"
    and modify the optree to make them work inplace */
 
@@ -608,25 +575,6 @@ static void S_pad_leavemy(pTHX) {
 						   "Pad leavemy: seq = %ld\n", (long)PL_cop_seqmax));
 }
 
-static OP *S_block_end(pTHX_ I32 floor, OP *seq) {
-	dVAR;
-	const int needblockscope = PL_hints & HINT_BLOCK_SCOPE;
-	OP *retval = S_scalarseq(aTHX_ seq);
-
-	CALL_BLOCK_HOOKS(bhk_pre_end, &retval);
-
-	LEAVE_SCOPE(floor);
-	CopHINTS_set(&PL_compiling, PL_hints);
-	if (needblockscope)
-		PL_hints |= HINT_BLOCK_SCOPE; /* propagate out */
-	S_pad_leavemy(aTHX);
-
-	CALL_BLOCK_HOOKS(bhk_post_end, &retval);
-
-	return retval;
-}
-
-
 #ifndef pad_alloc
 
 #define pad_alloc(OPTYPE, TMPTYPE) \
@@ -1055,19 +1003,6 @@ static PADOFFSET S_pad_findmy(pTHX_ const char *name, U32 flags) {
 #ifndef pad_findmy_pvs
   #define pad_findmy_pvs(S, FLAGS) S_pad_findmy(aTHX_ "" S "", FLAGS)
 #endif
-
-static OP *S_newDEFSVOP(pTHX) {
-	dVAR;
-	const PADOFFSET offset = pad_findmy_pvs("$_", 0);
-	if (offset == NOT_IN_PAD || PAD_COMPNAME_FLAGS_isOUR(offset)) {
-		return newSVREF(newGVOP(OP_GV, 0, PL_defgv));
-	}
-	else {
-		OP * const o = newOP(OP_PADSV, 0);
-		o->op_targ = offset;
-		return o;
-	}
-}
 
 static U32 S_intro_my(pTHX) {
 	dVAR;

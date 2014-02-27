@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 90;
+use Test::More tests => 91;
 
 use warnings FATAL => 'all';
 use strict;
@@ -123,3 +123,5 @@ is_deeply [qqw{}], ['a', 'b']; # Balanced delimiter
 is_deeply [qqw||], ['a', 'b'];
 is_deeply [qqw}}], ['a', 'b'];
 is_deeply [qqw~~], ['a', 'b'];
+
+is_deeply [qqw    99], ['a', 'b'];

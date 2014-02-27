@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 6;
+use Test::More tests => 0;
 
 use warnings FATAL => 'all';
 use strict;
@@ -8,8 +8,9 @@ use strict;
 use JGoff::Keyword::Qqw;
 
 #{ my $x = 'b';
-#  my @start = qqw(a $x c);
+#  my @start = qqw(a $x);
 #  is_deeply [@start], [qw(a b c)];
+#  is_deeply [@start], [ 'a', 'b' ];
 #}
 
 # Two copies of the same variable, shouldn't cause a problem but who knows?
@@ -49,10 +50,10 @@ my @id_3 = qqw ##
 ;
 is_deeply [@id_3], [qw(a b)];
 
-my @add = qqw ($x, $y);
+my @add = qqw ($x $y);
 is_deeply [@add], [qw(a b)];
 
-my @mymap = qqw ($fun, @args);
+my @mymap = qqw ($fun @args);
 is_deeply [@mymap], [qw(a b)];
 
 my @balanced_1 = qqw<$fun>;

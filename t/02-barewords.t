@@ -1,11 +1,14 @@
 #!perl
 
-use Test::More tests => 97;
+use Test::More tests => 2;
 
 use warnings FATAL => 'all';
 use strict;
 
 use JGoff::Keyword::Qqw;
+
+is_deeply [ qqw'a' ], [ 'a', 'b' ];
+#is_deeply [ qqw'a b' ], [ 'a', 'b' ];
 
 # {{{ Delimiters around 'a' in ASCII order
 #
