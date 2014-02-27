@@ -211,50 +211,18 @@ static void my_sv_cat_c(pTHX_ SV *sv, U32 c) {
 #define MY_UNI_IDFIRST(C) isIDFIRST_uni(C)
 #define MY_UNI_IDCONT(C)  isALNUM_uni(C)
 
-static SV *my_scan_word(pTHX_ Sentinel sen, bool allow_package) {
-	bool at_start, at_substart;
+static SV *my_scan_word(pTHX_ Sentinel sen, I32 end_delim) {
 	I32 c;
 	SV *sv = sentinel_mortalize(sen, newSVpvs(""));
 	if (lex_bufutf8()) {
 		SvUTF8_on(sv);
 	}
 
-	at_start = at_substart = TRUE;
 	c = lex_peek_unichar(0);
-
-	while (c != -1) {
-		if (at_substart ? MY_UNI_IDFIRST(c) : MY_UNI_IDCONT(c)) {
-			lex_read_unichar(0);
-			my_sv_cat_c(aTHX_ sv, c);
-			at_substart = FALSE;
-			c = lex_peek_unichar(0);
-		} else if (allow_package && !at_substart && c == '\'') {
-			lex_read_unichar(0);
-			c = lex_peek_unichar(0);
-			if (!MY_UNI_IDFIRST(c)) {
-				lex_stuff_pvs("'", 0);
-				break;
-			}
-			sv_catpvs(sv, "'");
-			at_substart = TRUE;
-		} else if (allow_package && (at_start || !at_substart) && c == ':') {
-			lex_read_unichar(0);
-			if (lex_peek_unichar(0) != ':') {
-				lex_stuff_pvs(":", 0);
-				break;
-			}
-			lex_read_unichar(0);
-			c = lex_peek_unichar(0);
-			if (!MY_UNI_IDFIRST(c)) {
-				lex_stuff_pvs("::", 0);
-				break;
-			}
-			sv_catpvs(sv, "::");
-			at_substart = TRUE;
-		} else {
-			break;
-		}
-		at_start = FALSE;
+	while (c != -1 && c != end_delim && c != ' ') {
+		lex_read_unichar(0);
+		my_sv_cat_c(aTHX_ sv, c);
+		c = lex_peek_unichar(0);
 	}
 
 	return SvCUR(sv) ? sv : NULL;
@@ -380,73 +348,6 @@ enum {
 	PARAM_NAMED    = 0x02
 };
 
-/* {{{ parse_param */
-static PADOFFSET parse_param(
-	pTHX_
-	Sentinel sen,
-	const SV *declarator, const KWSpec *spec, ParamSpec *param_spec,
-	int *pflags, SV **pname, OpGuard *ginit, SV **ptype,
-	I32 start_delim, I32 end_delim
-) {
-	I32 c;
-	char sigil = 0;
-	SV *name;
-
-	assert(!ginit->op);
-	*pflags = 0;
-	*ptype = NULL;
-
-	c = lex_peek_unichar(0);
-
-	switch(c) {
-		case -1:
-			croak("In %"SVf": unterminated parameter list", SVfARG(declarator));
-		case '$':
-		case '@':
-		case '%':
-			sigil = c;
-
-			lex_read_unichar(0);
-			lex_read_space(0);
-
-			if (!(name = my_scan_word(aTHX_ sen, FALSE))) {
-				croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
-			}
-			sv_insert(name, 0, 0, &sigil, 1);
-			*pname = name;
-			break;
-		default:
-			if (!(name = my_scan_word(aTHX_ sen, FALSE))) {
-				croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
-			}
-			sv_insert(name, 0, 0, &sigil, 1);
-			*pname = name;
-			break;
-/*
-			croak("In %"SVf": unexpected '%c' in parameter list (expecting a sigil)", SVfARG(declarator), (int)c);
-*/
-	}
-
-	lex_read_space(0);
-/*
-	if (c == ',') {
-		lex_read_unichar(0);
-		lex_read_space(0);
-        }
-	else if (c == ' ') {
-		lex_read_space(0);
-	} else if (c != end_delim) {
-		if (c == -1) {
-			croak("In %"SVf": unterminated parameter list", SVfARG(declarator));
-		}
-		croak("In %"SVf": unexpected '%c' in parameter list (expecting ',')", SVfARG(declarator), (int)c);
-	}
-*/
-
-	return pad_add_name_sv(*pname, IF_HAVE_PERL_5_16(padadd_NO_DUP_CHECK, 0), NULL, NULL);
-}
-/* }}} */
-
 /* {{{ register_info */
 static void register_info(pTHX_ UV key, SV *declarator, const KWSpec *kws, const ParamSpec *ps) {
 	dSP;
@@ -547,6 +448,7 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	I32 c;
 	I32 start_delim, end_delim;
 	OpGuard *init_sentinel;
+	int first_pass = TRUE;
 
 	declarator =
 		sentinel_mortalize(sen, newSVpvn(keyword_ptr, keyword_len));
@@ -586,51 +488,51 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	lex_read_space(0);
 
 	while ((c = lex_peek_unichar(0)) != end_delim) {
-		int flags;
-		SV *name, *type;
 		char sigil;
+		SV *name;
 		PADOFFSET padoff;
+		int word_len;
 
-		padoff = parse_param(aTHX_ sen, declarator, spec, param_spec, &flags, &name, init_sentinel, &type, start_delim, end_delim);
+		switch(c) {
+			case -1:
+				croak("In %"SVf": unterminated parameter list", SVfARG(declarator));
+			case '$':
+			case '@':
+			case '%':
+				sigil = c;
 
+				lex_read_unichar(0);
+				lex_read_space(0);
+
+				if (!(name = my_scan_word(aTHX_ sen, end_delim))) {
+					croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
+				}
+				sv_insert(name, 0, 0, &sigil, 1);
+				break;
+			default:
+				if (!(name = my_scan_word(aTHX_ sen, end_delim))) {
+					croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
+				}
+				word_len = strlen( SvPV_nolen( name ) );
+				if ( first_pass == TRUE ) {
+					first_pass = FALSE;
+					*pop = newSVOP( OP_CONST, 0, newSVpvn_flags( SvPV_nolen(name), word_len, 0 ) );
+				}
+				else {
+*pop = op_append_elem( OP_LIST, *pop,
+		       newSVOP( OP_CONST, 0,
+				newSVpvn_flags( SvPV_nolen(name), word_len, 0 )
+ ) );
+				}
+				break;
+		}
+
+		lex_read_space(0);
 		S_intro_my(aTHX);
-
-		sigil = SvPV_nolen(name)[0];
-
-		/* external constraints */
-		if (param_spec->slurpy.name) {
-			croak("In %"SVf": I was expecting \"%c\" after \"%"SVf"\", not \"%"SVf"\"", SVfARG(declarator), end_delim, SVfARG(param_spec->slurpy.name), SVfARG(name));
-		}
-		if (sigil != '$') {
-			assert(!init_sentinel->op);
-			param_spec->slurpy.name = name;
-			param_spec->slurpy.padoff = padoff;
-			param_spec->slurpy.type = type;
-			continue;
-		}
-
-		if (init_sentinel->op && !(spec->flags & FLAG_DEFAULT_ARGS)) {
-			croak("In %"SVf": default argument for %"SVf" not allowed here", SVfARG(declarator), SVfARG(name));
-		}
-
-		if (init_sentinel->op || param_spec->positional_optional.used) {
-			ParamInit *pi = piv_extend(&param_spec->positional_optional);
-			pi->param.name = name;
-			pi->param.padoff = padoff;
-			pi->param.type = type;
-			pi->init = op_guard_transfer(init_sentinel);
-			param_spec->positional_optional.used++;
-		}
-
 	}
+
 	lex_read_unichar(0);
 	lex_read_space(0);
-
-	/* it's go time. */
-	*pop = newSVOP( OP_CONST, 0, newSVpvn_flags( "a", 1, 0 ) );
-	*pop = op_append_elem( OP_LIST, *pop,
-			       newSVOP( OP_CONST, 0,
-					newSVpvn_flags( "b", 1, 0 ) ) );
 
 	return KEYWORD_PLUGIN_EXPR;
 }

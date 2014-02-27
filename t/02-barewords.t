@@ -1,14 +1,37 @@
 #!perl
 
-use Test::More tests => 2;
+use Test::More tests => 10;
 
 use warnings FATAL => 'all';
 use strict;
 
 use JGoff::Keyword::Qqw;
 
-is_deeply [ qqw'a' ], [ 'a', 'b' ];
-#is_deeply [ qqw'a b' ], [ 'a', 'b' ];
+is_deeply [ qqw'd' ], [ 'd' ];
+is_deeply [ qqw' e' ], [ 'e' ];
+is_deeply [ qqw' f ' ], [ 'f' ];
+is_deeply [ qqw'  g ' ], [ 'g' ];
+is_deeply [ qqw'  h  ' ], [ 'h' ];
+
+is_deeply [ qqw'ij' ], [ 'ij' ];
+is_deeply [ qqw' jk' ], [ 'jk' ];
+is_deeply [ qqw' kl ' ], [ 'kl' ];
+is_deeply [ qqw'  lm ' ], [ 'lm' ];
+is_deeply [ qqw'  mn  ' ], [ 'mn' ];
+
+=pod
+
+is_deeply [ qqw'z' ], [ 'a', 'b' ];
+is_deeply [ qqw' z ' ], [ 'a', 'b' ];
+is_deeply [ qqw'zabacadabra' ], [ 'a', 'b' ];
+is_deeply [ qqw'z b' ], [ 'a', 'b' ];
+is_deeply [ qqw' z b ' ], [ 'a', 'b' ];
+is_deeply [ qqw'z baca' ], [ 'a', 'b' ];
+is_deeply [ qqw'   z baca ' ], [ 'a', 'b' ];
+is_deeply [ qqw'   z
+ baca ' ], [ 'a', 'b' ];
+
+=cut
 
 # {{{ Delimiters around 'a' in ASCII order
 #

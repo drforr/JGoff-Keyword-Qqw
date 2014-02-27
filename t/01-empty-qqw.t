@@ -9,119 +9,118 @@ use JGoff::Keyword::Qqw;
 
 # Enumerate all possible qqw() delimiters, in ASCII order.
 #
-is_deeply [qqw!!], ['a', 'b'];
-is_deeply [qqw""], ['a', 'b'];
-#is_deeply [qqw##], ['a', 'b'];
-is_deeply [qqw$$], ['a', 'b'];
-is_deeply [qqw%%], ['a', 'b'];
-is_deeply [qqw&&], ['a', 'b'];
-#is_deeply [qqw´´], ['a', 'b'];
-is_deeply [qqw()], ['a', 'b']; # Special case
-#is_deeply [qqw(())], ['a', 'b']; # Double secret special case
-#is_deeply [qqw(()())], ['a', 'b']; # Double secret special case
-is_deeply [qqw))], ['a', 'b']; # Make sure ')' still behaves.
-                               # Also, notice that the backward versions don't
-                               # nest
-is_deeply [qqw**], ['a', 'b'];
-is_deeply [qqw++], ['a', 'b'];
-is_deeply [qqw,,], ['a', 'b'];
-is_deeply [qqw--], ['a', 'b'];
-is_deeply [qqw..], ['a', 'b'];
-is_deeply [qqw//], ['a', 'b'];
+is_deeply [qqw!!], [ ];
+is_deeply [qqw""], [ ];
+#is_deeply [qqw##], [ ];
+is_deeply [qqw$$], [ ];
+is_deeply [qqw%%], [ ];
+is_deeply [qqw&&], [ ];
+#is_deeply [qqw´´], [ ];
+is_deeply [qqw()], [ ]; # Special case
+#is_deeply [qqw(())], [ ]; # Double secret special case
+#is_deeply [qqw(()())], [ ]; # Double secret special case
+is_deeply [qqw))], [ ]; # Make sure ')' still behaves.
+                        # Also, notice that the backward versions don't nest
+is_deeply [qqw**], [ ];
+is_deeply [qqw++], [ ];
+is_deeply [qqw,,], [ ];
+is_deeply [qqw--], [ ];
+is_deeply [qqw..], [ ];
+is_deeply [qqw//], [ ];
 
-is_deeply [qqw 00], ['a', 'b'];
-is_deeply [qqw 11], ['a', 'b'];
-is_deeply [qqw 22], ['a', 'b'];
-is_deeply [qqw 33], ['a', 'b'];
-is_deeply [qqw 44], ['a', 'b'];
-is_deeply [qqw 55], ['a', 'b'];
-is_deeply [qqw 66], ['a', 'b'];
-is_deeply [qqw 77], ['a', 'b'];
-is_deeply [qqw 88], ['a', 'b'];
-is_deeply [qqw 99], ['a', 'b'];
-#is_deeply [qqw::],  ['a', 'b']; # XXX aiyee, rabbit hole here.
-                                 # XXX C< qw:a b c:; > is legitimate, but the
-                                 # XXX keyword interceptor won't work?
-is_deeply [qqw;;], ['a', 'b']; # Special case
-is_deeply [qqw<>], ['a', 'b']; # Balanced delimiter
-#is_deeply [qqw<<>>], ['a', 'b']; # Balanced delimiters can nest
-#is_deeply [qqw<<<>>>], ['a', 'b']; # Go deeper
-#is_deeply [qqw<<><>>], ['a', 'b']; # Nesting can occur twice
-is_deeply [qqw==], ['a', 'b'];
-is_deeply [qqw>>], ['a', 'b']; # Make sure unbalanced still works.
-is_deeply [qqw??], ['a', 'b'];
+is_deeply [qqw 00], [ ];
+is_deeply [qqw 11], [ ];
+is_deeply [qqw 22], [ ];
+is_deeply [qqw 33], [ ];
+is_deeply [qqw 44], [ ];
+is_deeply [qqw 55], [ ];
+is_deeply [qqw 66], [ ];
+is_deeply [qqw 77], [ ];
+is_deeply [qqw 88], [ ];
+is_deeply [qqw 99], [ ];
+#is_deeply [qqw::],  [ ]; # XXX aiyee, rabbit hole here.
+                          # XXX C< qw:a b c:; > is legitimate, but the
+                          # XXX keyword interceptor won't work?
+is_deeply [qqw;;], [ ]; # Special case
+is_deeply [qqw<>], [ ]; # Balanced delimiter
+#is_deeply [qqw<<>>], [ ]; # Balanced delimiters can nest
+#is_deeply [qqw<<<>>>], [ ]; # Go deeper
+#is_deeply [qqw<<><>>], [ ]; # Nesting can occur twice
+is_deeply [qqw==], [ ];
+is_deeply [qqw>>], [ ]; # Make sure unbalanced still works.
+is_deeply [qqw??], [ ];
 
-is_deeply [qqw@@], ['a', 'b'];
-is_deeply [qqw AA], ['a', 'b'];
-is_deeply [qqw BB], ['a', 'b'];
-is_deeply [qqw CC], ['a', 'b'];
-is_deeply [qqw DD], ['a', 'b'];
-is_deeply [qqw EE], ['a', 'b'];
-is_deeply [qqw FF], ['a', 'b'];
-is_deeply [qqw GG], ['a', 'b'];
-is_deeply [qqw HH], ['a', 'b'];
-is_deeply [qqw II], ['a', 'b'];
-is_deeply [qqw JJ], ['a', 'b'];
-is_deeply [qqw KK], ['a', 'b'];
-is_deeply [qqw LL], ['a', 'b'];
-is_deeply [qqw MM], ['a', 'b'];
-is_deeply [qqw NN], ['a', 'b'];
-is_deeply [qqw OO], ['a', 'b'];
+is_deeply [qqw@@], [ ];
+is_deeply [qqw AA], [ ];
+is_deeply [qqw BB], [ ];
+is_deeply [qqw CC], [ ];
+is_deeply [qqw DD], [ ];
+is_deeply [qqw EE], [ ];
+is_deeply [qqw FF], [ ];
+is_deeply [qqw GG], [ ];
+is_deeply [qqw HH], [ ];
+is_deeply [qqw II], [ ];
+is_deeply [qqw JJ], [ ];
+is_deeply [qqw KK], [ ];
+is_deeply [qqw LL], [ ];
+is_deeply [qqw MM], [ ];
+is_deeply [qqw NN], [ ];
+is_deeply [qqw OO], [ ];
 
-is_deeply [qqw PP], ['a', 'b'];
-is_deeply [qqw QQ], ['a', 'b'];
-is_deeply [qqw RR], ['a', 'b'];
-is_deeply [qqw SS], ['a', 'b'];
-is_deeply [qqw TT], ['a', 'b'];
-is_deeply [qqw UU], ['a', 'b'];
-is_deeply [qqw VV], ['a', 'b'];
-is_deeply [qqw WW], ['a', 'b'];
-is_deeply [qqw XX], ['a', 'b'];
-is_deeply [qqw YY], ['a', 'b'];
-is_deeply [qqw ZZ], ['a', 'b'];
-is_deeply [qqw[]], ['a', 'b']; # Balanced delimiters
-#is_deeply [qqw[[]]], ['a', 'b']; # Balanced delimiters can nest
-#is_deeply [qqw[[[]]]], ['a', 'b']; # Doubly nested
-#is_deeply [qqw[[][]]], ['a', 'b']; # Twin balanced
+is_deeply [qqw PP], [ ];
+is_deeply [qqw QQ], [ ];
+is_deeply [qqw RR], [ ];
+is_deeply [qqw SS], [ ];
+is_deeply [qqw TT], [ ];
+is_deeply [qqw UU], [ ];
+is_deeply [qqw VV], [ ];
+is_deeply [qqw WW], [ ];
+is_deeply [qqw XX], [ ];
+is_deeply [qqw YY], [ ];
+is_deeply [qqw ZZ], [ ];
+is_deeply [qqw[]], [ ]; # Balanced delimiters
+#is_deeply [qqw[[]]], [ ]; # Balanced delimiters can nest
+#is_deeply [qqw[[[]]]], [ ]; # Doubly nested
+#is_deeply [qqw[[][]]], [ ]; # Twin balanced
 # \\ doesn't work
-is_deeply [qqw]]], ['a', 'b']; # Non-balanced version
-is_deeply [qqw^^], ['a', 'b'];
-is_deeply [qqw __], ['a', 'b'];
+is_deeply [qqw]]], [ ]; # Non-balanced version
+is_deeply [qqw^^], [ ];
+is_deeply [qqw __], [ ];
 
-is_deeply [qqw``], ['a', 'b'];
-is_deeply [qqw aa], ['a', 'b'];
-is_deeply [qqw bb], ['a', 'b'];
-is_deeply [qqw cc], ['a', 'b'];
-is_deeply [qqw dd], ['a', 'b'];
-is_deeply [qqw ee], ['a', 'b'];
-is_deeply [qqw ff], ['a', 'b'];
-is_deeply [qqw gg], ['a', 'b'];
-is_deeply [qqw hh], ['a', 'b'];
-is_deeply [qqw ii], ['a', 'b'];
-is_deeply [qqw jj], ['a', 'b'];
-is_deeply [qqw kk], ['a', 'b'];
-is_deeply [qqw ll], ['a', 'b'];
-is_deeply [qqw mm], ['a', 'b'];
-is_deeply [qqw nn], ['a', 'b'];
-is_deeply [qqw oo], ['a', 'b'];
+is_deeply [qqw``], [ ];
+is_deeply [qqw aa], [ ];
+is_deeply [qqw bb], [ ];
+is_deeply [qqw cc], [ ];
+is_deeply [qqw dd], [ ];
+is_deeply [qqw ee], [ ];
+is_deeply [qqw ff], [ ];
+is_deeply [qqw gg], [ ];
+is_deeply [qqw hh], [ ];
+is_deeply [qqw ii], [ ];
+is_deeply [qqw jj], [ ];
+is_deeply [qqw kk], [ ];
+is_deeply [qqw ll], [ ];
+is_deeply [qqw mm], [ ];
+is_deeply [qqw nn], [ ];
+is_deeply [qqw oo], [ ];
 
-is_deeply [qqw pp], ['a', 'b'];
-is_deeply [qqw qq], ['a', 'b'];
-is_deeply [qqw rr], ['a', 'b'];
-is_deeply [qqw ss], ['a', 'b'];
-is_deeply [qqw tt], ['a', 'b'];
-is_deeply [qqw uu], ['a', 'b'];
-is_deeply [qqw vv], ['a', 'b'];
-is_deeply [qqw ww], ['a', 'b'];
-is_deeply [qqw xx], ['a', 'b'];
-is_deeply [qqw yy], ['a', 'b'];
-is_deeply [qqw zz], ['a', 'b'];
-is_deeply [qqw{}], ['a', 'b']; # Balanced delimiter
-#is_deeply [qqw{{}}], ['a', 'b']; # Balanced delimiters can nest
-#is_deeply [qqw{{{}}}], ['a', 'b']; # Go deeper
-#is_deeply [qqw{{}{}}], ['a', 'b']; # Two nested pairs
-is_deeply [qqw||], ['a', 'b'];
-is_deeply [qqw}}], ['a', 'b'];
-is_deeply [qqw~~], ['a', 'b'];
+is_deeply [qqw pp], [ ];
+is_deeply [qqw qq], [ ];
+is_deeply [qqw rr], [ ];
+is_deeply [qqw ss], [ ];
+is_deeply [qqw tt], [ ];
+is_deeply [qqw uu], [ ];
+is_deeply [qqw vv], [ ];
+is_deeply [qqw ww], [ ];
+is_deeply [qqw xx], [ ];
+is_deeply [qqw yy], [ ];
+is_deeply [qqw zz], [ ];
+is_deeply [qqw{}], [ ]; # Balanced delimiter
+#is_deeply [qqw{{}}], [ ]; # Balanced delimiters can nest
+#is_deeply [qqw{{{}}}], [ ]; # Go deeper
+#is_deeply [qqw{{}{}}], [ ]; # Two nested pairs
+is_deeply [qqw||], [ ];
+is_deeply [qqw}}], [ ];
+is_deeply [qqw~~], [ ];
 
-is_deeply [qqw    99], ['a', 'b'];
+is_deeply [qqw    99], [ ];
