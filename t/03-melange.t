@@ -7,10 +7,9 @@ use strict;
 
 use JGoff::Keyword::Qqw;
 
-{ my $x = 'b';
+{ my $x = 'c';
   my @start = qqw(a $x);
-#  is_deeply [@start], [qw(a b c)];
-  is_deeply [@start], [ 'a', 'b' ];
+  is_deeply [@start], [ 'a', 'c' ];
 }
 
 # Two copies of the same variable, shouldn't cause a problem but who knows?

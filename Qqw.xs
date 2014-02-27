@@ -442,12 +442,9 @@ static I32 end_delimiter ( I32 start_delim ) {
 
 /* {{{ parse_qqw */
 static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRLEN keyword_len, const KWSpec *spec) {
-	ParamSpec *param_spec;
 	SV *declarator;
-	OpGuard *prelude_sentinel;
 	I32 c;
 	I32 start_delim, end_delim;
-	OpGuard *init_sentinel;
 	int first_pass = TRUE;
 
 	declarator =
@@ -458,15 +455,8 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 
 	lex_read_space(0);
 
-	/* initialize synthetic optree */
-	Newx(prelude_sentinel, 1, OpGuard);
-	op_guard_init(prelude_sentinel);
-	sentinel_register(sen, prelude_sentinel, free_op_guard_void);
-
-	/* parameters */
-	param_spec = NULL;
-
 	c = lex_peek_unichar(0);
+
 	/* Skip whitespace after the token, but this is a special case now. */
 	while (c == ' ') {
 		lex_read_unichar(0);
@@ -476,21 +466,12 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	start_delim = c;
 	end_delim = end_delimiter(c);
 
-	Newx(init_sentinel, 1, OpGuard);
-	op_guard_init(init_sentinel);
-	sentinel_register(sen, init_sentinel, free_op_guard_void);
-
-	Newx(param_spec, 1, ParamSpec);
-	ps_init(param_spec);
-	sentinel_register(sen, param_spec, ps_free_void);
-
 	lex_read_unichar(0);
 	lex_read_space(0);
 
 	while ((c = lex_peek_unichar(0)) != end_delim) {
 		char sigil;
 		SV *name;
-		PADOFFSET padoff;
 		int word_len;
 
 		switch(c) {
@@ -499,6 +480,7 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 			case '$':
 			case '@':
 			case '%':
+/*
 				sigil = c;
 
 				lex_read_unichar(0);
@@ -509,6 +491,7 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 				}
 				sv_insert(name, 0, 0, &sigil, 1);
 				break;
+*/
 			default:
 				if (!(name = my_scan_word(aTHX_ sen, end_delim))) {
 					croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
