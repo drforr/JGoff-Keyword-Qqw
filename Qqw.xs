@@ -118,6 +118,17 @@ DEFSTRUCT(Resource) {
 
 typedef Resource *Sentinel[1];
 
+static OP *my_var_g(pTHX_ I32 type, I32 flags, PADOFFSET padoff) {
+	OP *var = newOP(type, flags);
+	var->op_targ = padoff;
+	return var;
+}
+
+static OP *my_var(pTHX_ I32 flags, PADOFFSET padoff) {
+	return my_var_g(aTHX_ OP_PADSV, flags, padoff);
+}
+
+
 static void sentinel_clear_void(pTHX_ void *p) {
 	Resource **pp = p;
 	while (*pp) {
@@ -446,6 +457,7 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 	I32 c;
 	I32 start_delim, end_delim;
 	int first_pass = TRUE;
+	PADOFFSET padoff;
 
 	declarator =
 		sentinel_mortalize(sen, newSVpvn(keyword_ptr, keyword_len));
@@ -473,6 +485,7 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 		char sigil;
 		SV *name;
 		int word_len;
+		I32 type = OP_PADSV;
 
 		switch(c) {
 			case -1:
@@ -480,18 +493,22 @@ static int parse_qqw(pTHX_ Sentinel sen, OP **pop, const char *keyword_ptr, STRL
 			case '$':
 			case '@':
 			case '%':
-/*
-				sigil = c;
-
-				lex_read_unichar(0);
-				lex_read_space(0);
-
 				if (!(name = my_scan_word(aTHX_ sen, end_delim))) {
 					croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
 				}
-				sv_insert(name, 0, 0, &sigil, 1);
+				if ( first_pass == TRUE ) {
+					first_pass = FALSE;
+*pop = newSVOP( OP_CONST, 0, newSVpvn_flags( SvPV_nolen(name), word_len, 0 ) );
+				}
+				else {
+*pop = op_append_elem( OP_LIST, *pop,
+			my_var(
+				aTHX_
+				OPf_WANT_LIST | (OPpLVAL_INTRO << 8),
+				pad_add_name_sv(name, 0, NULL, NULL)
+) );
+				}
 				break;
-*/
 			default:
 				if (!(name = my_scan_word(aTHX_ sen, end_delim))) {
 					croak("In %"SVf": missing identifier after '%c'", SVfARG(declarator), sigil);
